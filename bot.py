@@ -359,6 +359,170 @@ def parse_opencode_output(raw):
     return text, usage, cost, steps
 
 
+def load_deepseek_key():
+    key = (config.DEEPSEEK_API_KEY or "").strip()
+    if key:
+        return key
+
+    auth_path = Path.home() / ".local" / "share" / "opencode" / "auth.json"
+    try:
+        with auth_path.open("r", encoding="utf-8") as file:
+            data = json.load(file)
+        key = ((data.get("deepseek") or {}).get("key") or "").strip()
+        if key:
+            logger.info("DeepSeek: использую ключ из opencode auth.json (fallback).")
+            return key
+    except FileNotFoundError:
+        pass
+    except Exception as error:
+        logger.debug("DeepSeek: не удалось прочитать opencode auth.json: %s", error)
+
+    return None
+
+
+def load_skill_prompt(name):
+    path = BASE_DIR / ".opencode" / "skill" / name / "SKILL.md"
+    try:
+        text = path.read_text(encoding="utf-8")
+    except Exception as error:
+        logger.warning("Не удалось прочитать навык %s: %s", name, error)
+        return ""
+
+    if text.startswith("---"):
+        parts = text.split("---", 2)
+        if len(parts) == 3:
+            text = parts[2]
+
+    return text.strip()
+
+
+async def call_deepseek(system_prompt, user_prompt):
+    key = load_deepseek_key()
+    if not key:
+        logger.error("DeepSeek: ключ не найден. Задайте DEEPSEEK_API_KEY в .env.")
+        return None
+
+    payload = {
+        "model": config.DEEPSEEK_MODEL,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": config.DEEPSEEK_TEMPERATURE,
+        "max_tokens": config.DEEPSEEK_MAX_TOKENS,
+        "stream": False,
+    }
+    headers = {
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+    }
+    timeout = aiohttp.ClientTimeout(total=config.DEEPSEEK_TIMEOUT)
+
+    for attempt in range(config.DEEPSEEK_RETRY_COUNT + 1):
+        started = time.perf_counter()
+        try:
+            async with aiohttp.ClientSession(headers=headers) as session:
+                async with session.post(
+                    config.DEEPSEEK_API_URL, json=payload, timeout=timeout
+                ) as response:
+                    body = await response.text()
+
+                    if response.status == 200:
+                        data = json.loads(body)
+                        content = (
+                            data.get("choices", [{}])[0]
+                            .get("message", {})
+                            .get("content", "")
+                            or ""
+                        ).strip()
+                        usage = data.get("usage") or {}
+                        logger.info(
+                            "DeepSeek: %.2f с, model=%s, токены prompt=%d completion=%d "
+                            "total=%d cache_hit=%d cache_miss=%d",
+                            time.perf_counter() - started,
+                            data.get("model") or config.DEEPSEEK_MODEL,
+                            int(usage.get("prompt_tokens") or 0),
+                            int(usage.get("completion_tokens") or 0),
+                            int(usage.get("total_tokens") or 0),
+                            int(usage.get("prompt_cache_hit_tokens") or 0),
+                            int(usage.get("prompt_cache_miss_tokens") or 0),
+                        )
+                        if not content:
+                            logger.error("DeepSeek: пустой ответ модели.")
+                            return None
+                        return content
+
+                    retryable = response.status == 429 or response.status >= 500
+                    if retryable and attempt < config.DEEPSEEK_RETRY_COUNT:
+                        logger.warning(
+                            "DeepSeek: HTTP %s, повтор через %ss (попытка %d/%d)",
+                            response.status,
+                            config.DEEPSEEK_RETRY_DELAY,
+                            attempt + 1,
+                            config.DEEPSEEK_RETRY_COUNT,
+                        )
+                    else:
+                        logger.error(
+                            "DeepSeek: HTTP %s: %s",
+                            response.status,
+                            body[:500],
+                        )
+                        return None
+        except Exception as error:
+            if attempt < config.DEEPSEEK_RETRY_COUNT:
+                logger.warning(
+                    "DeepSeek: ошибка запроса (%s), повтор через %ss",
+                    error,
+                    config.DEEPSEEK_RETRY_DELAY,
+                )
+            else:
+                logger.error("DeepSeek: ошибка запроса: %s", error)
+                return None
+
+        await asyncio.sleep(config.DEEPSEEK_RETRY_DELAY)
+
+    return None
+
+
+async def summarize_news(context):
+    if config.LLM_BACKEND == "deepseek":
+        system_prompt = load_skill_prompt("dota-digest")
+        user_prompt = (
+            f"Окно: последние {config.NEWS_WINDOW_HOURS} ч.\n\n"
+            f"Новости:\n{context}"
+        )
+        summary = await call_deepseek(system_prompt, user_prompt)
+        if summary:
+            return summary
+        if not config.OPENCODE_ENABLED:
+            logger.warning("DeepSeek недоступен, opencode-fallback отключён.")
+            return None
+        logger.warning("DeepSeek недоступен, пробую opencode.")
+
+    if config.OPENCODE_ENABLED:
+        return await summarize_with_opencode(context)
+
+    return None
+
+
+async def summarize_patch(version, context):
+    if config.LLM_BACKEND == "deepseek":
+        system_prompt = load_skill_prompt("patch-digest")
+        user_prompt = f"Патч: {version}\n\nПатчноуты:\n{context}"
+        summary = await call_deepseek(system_prompt, user_prompt)
+        if summary:
+            return summary
+        if not config.OPENCODE_ENABLED:
+            logger.warning("DeepSeek недоступен, opencode-fallback отключён.")
+            return None
+        logger.warning("DeepSeek недоступен, пробую opencode.")
+
+    if config.OPENCODE_ENABLED:
+        return await summarize_patch_with_opencode(version, context)
+
+    return None
+
+
 async def summarize_with_opencode(context):
     """Вызывает локальный opencode и возвращает краткую выжимку."""
     command = [resolve_opencode(), "run", "--command", config.OPENCODE_COMMAND]
@@ -450,13 +614,12 @@ async def build_digest_embeds(news):
     context = build_news_context(news)
     summary = None
 
-    if config.OPENCODE_ENABLED:
-        summary = await summarize_with_opencode(context)
+    summary = await summarize_news(context)
 
     if summary:
-        logger.info("Использую выжимку opencode.")
+        logger.info("Использую выжимку LLM.")
     else:
-        logger.warning("Использую резервную сводку без opencode.")
+        logger.warning("Использую резервную сводку без LLM.")
         summary = build_fallback_summary(news)
 
     summary = summary[: config.MAX_DESCRIPTION_LENGTH]
@@ -879,14 +1042,14 @@ async def check_patch_update():
     if config.PATCH_SUMMARY_ENABLED:
         context = await fetch_patch_context(number)
         if context:
-            summary = await summarize_patch_with_opencode(number, context)
+            summary = await summarize_patch(number, context)
 
     if summary:
         description = summary[: config.MAX_DESCRIPTION_LENGTH]
-        logger.info("Патчи: использую выжимку opencode.")
+        logger.info("Патчи: использую выжимку LLM.")
     else:
         description = f"Вышел патч **{number}**.\n[Открыть страницу патча]({url})"
-        logger.warning("Патчи: использую простое сообщение без opencode.")
+        logger.warning("Патчи: использую простое сообщение без LLM.")
 
     embed = discord.Embed(
         title=f"🆕 Новый патч Dota 2 — {number}",

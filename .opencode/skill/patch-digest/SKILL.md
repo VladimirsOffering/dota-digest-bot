@@ -10,7 +10,7 @@ The input is Dota 2 patch notes, usually in English, provided as an attached fil
 ## Rules
 
 - Write in Russian.
-- If the attached patch-notes content is truncated, you may use the read tool ONLY on the provided patch-notes file path. Do not read other files or use other tools.
+- If the provided patch-notes text is truncated, summarize what is available. Do not invent missing changes.
 - Output ONLY the digest: 5-10 bullet points, each starting with "- ".
 - Pick the most impactful changes: global/map changes, item changes, and significant hero buffs and nerfs.
 - Do not list every change. Merge related changes and skip minor number tweaks.

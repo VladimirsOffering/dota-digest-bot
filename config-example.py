@@ -69,6 +69,17 @@ OPENCODE_COMMAND = "dota-digest"           # Команда из .opencode/comma
 OPENCODE_TIMEOUT = 240                      # Таймаут вызова opencode, секунд
 MAX_PROMPT_LENGTH = 16000                   # Ограничение на аргументы командной строки
 
+# --- DEEPSEEK API ---
+LLM_BACKEND = "deepseek"                    # "deepseek" или "opencode"
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
+DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
+DEEPSEEK_MODEL = "deepseek-chat"
+DEEPSEEK_TIMEOUT = 180                      # Таймаут запроса к API, секунд
+DEEPSEEK_MAX_TOKENS = 2500                  # Максимум токенов в ответе
+DEEPSEEK_TEMPERATURE = 0.3
+DEEPSEEK_RETRY_COUNT = 2                    # Повторы при 429/5xx
+DEEPSEEK_RETRY_DELAY = 5                    # Пауза между повторами, секунд
+
 # --- МОНИТОРИНГ ПАТЧЕЙ ---
 PATCH_MONITOR_ENABLED = True
 PATCH_LIST_URL = "https://www.dota2.com/datafeed/patchnoteslist?language=english"

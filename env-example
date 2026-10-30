@@ -4,6 +4,9 @@
 # Обязательно: токен Discord-бота
 BOT_TOKEN=your_discord_bot_token_here
 
+# Ключ DeepSeek API (нужен, если LLM_BACKEND="deepseek")
+DEEPSEEK_API_KEY=your_deepseek_api_key_here
+
 # Необязательно: ID пользователя, которому разрешены команды бота
 # OWNER_ID=123456789012345678
 
