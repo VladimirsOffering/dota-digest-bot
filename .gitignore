@@ -1,0 +1,27 @@
+# Секреты и локальная конфигурация
+.env
+.env.*
+.config
+.config/
+config.py
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# Node/opencode
+node_modules/
+.opencode/node_modules/
+
+# Логи и состояние
+logs/
+*.log
+data/
+
+# ОС
+Thumbs.db
+.DS_Store

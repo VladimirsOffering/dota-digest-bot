@@ -1,0 +1,12 @@
+# Шаблон конфигурации.
+# Скопируйте этот файл в .env и заполните значения.
+
+# Обязательно: токен Discord-бота
+BOT_TOKEN=your_discord_bot_token_here
+
+# Необязательно: ID пользователя, которому разрешены команды бота
+# OWNER_ID=123456789012345678
+
+# Необязательно: путь к opencode.exe и модель
+# OPENCODE_EXE=C:\Users\you\AppData\Roaming\npm\node_modules\opencode-ai\bin\opencode.exe
+# OPENCODE_MODEL=deepseek/deepseek-flash
