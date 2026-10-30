@@ -103,6 +103,39 @@ start.bat
 python bot.py
 ```
 
+### 5. Установка как сервис (Linux/systemd)
+
+```bash
+sudo bash install-service.sh
+```
+
+Скрипт:
+
+- создаст `.venv` и установит зависимости;
+- проверит наличие `config.py` и `.env` (если их нет — создаст из примеров и попросит заполнить);
+- создаст `/etc/systemd/system/dota-digest-bot.service`;
+- включит автозапуск и запустит сервис с `Restart=always`.
+
+Если бот должен работать не от текущего пользователя:
+
+```bash
+sudo BOT_USER=pi bash install-service.sh
+```
+
+Логи сервиса:
+
+```bash
+journalctl -u dota-digest-bot -f
+```
+
+Остановка и удаление:
+
+```bash
+sudo systemctl disable --now dota-digest-bot
+sudo rm /etc/systemd/system/dota-digest-bot.service
+sudo systemctl daemon-reload
+```
+
 ## Команды
 
 | Команда | Описание |
@@ -171,6 +204,7 @@ config.py                  — локальная конфигурация (не
 config-example.py          — шаблон config.py
 env-example                — шаблон .env
 start.bat                  — запуск на Windows
+install-service.sh         — установка как systemd-сервис на Linux
 .opencode/
   skill/dota-digest/       — правила выжимки новостей (системный промпт)
   skill/patch-digest/      — правила выжимки патчноутов (системный промпт)
